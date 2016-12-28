@@ -39,7 +39,7 @@ class Vector3 {
     }
 
     subtract(other) {
-        return add(this, other.multiply(-1));
+        return this.add(this, other.multiply(-1));
     }
 
     multiply(mul) {
@@ -47,6 +47,36 @@ class Vector3 {
             this.x * mul,
             this.y * mul,
             this.z * mul
+        );
+    }
+
+    magnitude() {
+        return Math.sqrt(
+            Math.pow(this.x, 2) +
+            Math.pow(this.y, 2) +
+            Math.pow(this.z, 2)
+        );
+    }
+
+    normalize() {
+        var m = this.magnitude();
+        if (m == 0) { m = 1 }
+        return new Vector3(this.x / m, this.y / m, this.z / m);
+    }
+
+    distanceTo(other) {
+        return Math.sqrt(
+            Math.pow(Math.abs(this.x - other.x), 2) +
+            Math.pow(Math.abs(this.y - other.y), 2) +
+            Math.pow(Math.abs(this.z - other.z), 2)
+        );
+    }
+
+    clamp(x, y, z) {
+        return new Vector3(
+            Math.min(this.x, x),
+            Math.min(this.y, y),
+            Math.min(this.z, z)
         );
     }
 }
@@ -64,14 +94,49 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-        this.velocity = new Vector3(
-            Math.random() * 200 - 100,
-            Math.random() * 200 - 100,
-            Math.random() * 200 - 100
-        );
+        //this.velocity = new Vector3(
+        //    Math.random() * 200 - 100,
+        //    Math.random() * 200 - 100,
+        //    Math.random() * 200 - 100
+        //);
+        this.velocity = new Vector3(0,0,0);
+        this.acceleration = new Vector3(0,0,0);
     }
 
     step(t, dt) {
+        var neighbors = [];
+        var flockMass = new Vector3(0,0,0);
+        var flockHeading = new Vector3(0,0,0);
+
+        for (var i=0; i < this.world.entities.length; ++i) {
+            var e = this.world.entities[i];
+            
+            // calculate the local center of geometry
+            var d = this.pos.distanceTo(e.pos);
+            if (d > 0 && d < 500) {
+                neighbors.push(e);
+                flockMass = flockMass.add(e.pos);
+                flockHeading = flockHeading.add(e.velocity);
+            }
+        }
+
+        // local center of geometry
+        flockMass = flockMass.multiply(1/neighbors.length);
+        if (neighbors.length > 0) {
+            // if we have neighbors, accelerate to the local CoG
+            flockMass = flockMass.multiply(1/neighbors.length);
+            this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-100000 / Math.pow(this.pos.distanceTo(flockMass), 2));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(100));
+        }
+        
+        // bounds of the world (sphere)
+        var worldRadius = 500;
+        if (this.pos.magnitude() > worldRadius) {
+            this.acceleration = this.pos.normalize().multiply(-100);
+        }
+
+        // euler approx motion TODO: RK4
+        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(100, 100, 100);
         this.pos = this.pos.add(this.velocity.multiply(dt));
 
     }
@@ -166,8 +231,8 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
     constructor() {
         super()
 
-        this.boidGeometry = new THREE.BoxGeometry( 200, 200, 200 );
-        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
+        this.boidGeometry = new THREE.BoxGeometry( 5, 5, 5 );
+        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } );
     }
 
     drawEntity(e) {
@@ -188,16 +253,16 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
-    world.entities.push(new Boid());
+    for (var i=0; i < 200; ++i) {
+        var b = new Boid(world);
+        b.pos = new Vector3(
+            Math.random() * 2000 - 1000,
+            Math.random() * 2000 - 1000,
+            Math.random() * 2000 - 1000
+        );
+        world.entities.push(b);
+    }
+
     sim.world = world;
     sim.step();
 
