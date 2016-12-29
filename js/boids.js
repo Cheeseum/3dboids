@@ -74,9 +74,9 @@ class Vector3 {
 
     clamp(x, y, z) {
         return new Vector3(
-            Math.min(this.x, x),
-            Math.min(this.y, y),
-            Math.min(this.z, z)
+            Math.max(Math.min(this.x, x), -x),
+            Math.max(Math.min(this.y, y), -y),
+            Math.max(Math.min(this.z, z), -z)
         );
     }
 }
@@ -106,6 +106,7 @@ class Boid extends Entity {
     step(t, dt) {
         var neighbors = [];
         var flockMass = new Vector3(0,0,0);
+        var flockAvoid = new Vector3(0,0,0);
         var flockHeading = new Vector3(0,0,0);
 
         for (var i=0; i < this.world.entities.length; ++i) {
@@ -113,10 +114,12 @@ class Boid extends Entity {
             
             // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < 500) {
+            if (d > 0 && d < 250) {
                 neighbors.push(e);
                 flockMass = flockMass.add(e.pos);
+                flockAvoid = flockAvoid.add(e.pos.subtract(this.pos).normalize().multiply(1/(d*d)));
                 flockHeading = flockHeading.add(e.velocity);
+                
             }
         }
 
@@ -125,19 +128,20 @@ class Boid extends Entity {
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/neighbors.length);
-            this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-100000 / Math.pow(this.pos.distanceTo(flockMass), 2));
+            //this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(-10 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(100));
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
         }
         
         // bounds of the world (sphere)
         if (this.pos.magnitude() > this.world.radius) {
-            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1000));
+            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1 * Math.pow(this.pos.magnitude() - this.world.radius, 2)));
         }
 
         // euler approx motion TODO: RK4
         this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(100, 100, 100);
         this.pos = this.pos.add(this.velocity.multiply(dt));
-
     }
 }
 
@@ -235,8 +239,8 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
         this.camera.position.z = this.world.radius * 1.2;
 
-        this.boidGeometry = new THREE.BoxGeometry( 5, 5, 5 );
-        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: false } );
+        this.boidGeometry = new THREE.CylinderGeometry(0.1, 15, 20, 4);
+        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
 
         var l = new THREE.DirectionalLight( 0xffffff, 0.5 );
         l.position.set(0, 1, 0);
@@ -257,6 +261,12 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         e.mesh.position.x = e.pos.x;
         e.mesh.position.y = e.pos.y;
         e.mesh.position.z = e.pos.z;
+
+        var v = e.velocity.normalize();
+        e.mesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(v.x, v.y, v.z)
+        );
     }
 }
     
