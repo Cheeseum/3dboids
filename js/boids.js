@@ -283,6 +283,8 @@ function runBoids () {
     document.body.appendChild(rend.renderer.domElement);
 
     rend.draw();
+
+    var controls = new THREE.OrbitControls(rend.camera);
 }
 
 
