@@ -117,7 +117,7 @@ class Boid extends Entity {
             if (d > 0 && d < 250) {
                 neighbors.push(e);
                 flockMass = flockMass.add(e.pos);
-                flockAvoid = flockAvoid.add(e.pos.subtract(this.pos).normalize().multiply(5));
+                flockAvoid = flockAvoid.add(e.pos.subtract(this.pos).normalize().multiply(1/(d*d)));
                 flockHeading = flockHeading.add(e.velocity);
                 
             }
@@ -129,8 +129,8 @@ class Boid extends Entity {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/neighbors.length);
             //this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(-10);
-            this.acceleration = this.acceleration.add(flockAvoid);
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(-10 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(100));
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
         }
         
@@ -140,7 +140,7 @@ class Boid extends Entity {
         }
 
         // euler approx motion TODO: RK4
-        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(50, 50, 50);
+        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(100, 100, 100);
         this.pos = this.pos.add(this.velocity.multiply(dt));
     }
 }
