@@ -74,9 +74,9 @@ class Vector3 {
 
     clamp(x, y, z) {
         return new Vector3(
-            Math.min(this.x, x),
-            Math.min(this.y, y),
-            Math.min(this.z, z)
+            Math.max(Math.min(this.x, x), -x),
+            Math.max(Math.min(this.y, y), -y),
+            Math.max(Math.min(this.z, z), -z)
         );
     }
 }
@@ -113,7 +113,7 @@ class Boid extends Entity {
             
             // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < 500) {
+            if (d > 0 && d < 200) {
                 neighbors.push(e);
                 flockMass = flockMass.add(e.pos);
                 flockHeading = flockHeading.add(e.velocity);
@@ -125,13 +125,13 @@ class Boid extends Entity {
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/neighbors.length);
-            this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-100000 / Math.pow(this.pos.distanceTo(flockMass), 2));
+            this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
         }
         
         // bounds of the world (sphere)
         if (this.pos.magnitude() > this.world.radius) {
-            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1000));
+            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1 * Math.pow(this.pos.magnitude() - this.world.radius, 2)));
         }
 
         // euler approx motion TODO: RK4
