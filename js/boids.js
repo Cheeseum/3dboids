@@ -106,6 +106,7 @@ class Boid extends Entity {
     step(t, dt) {
         var neighbors = [];
         var flockMass = new Vector3(0,0,0);
+        var flockAvoid = new Vector3(0,0,0);
         var flockHeading = new Vector3(0,0,0);
 
         for (var i=0; i < this.world.entities.length; ++i) {
@@ -113,10 +114,12 @@ class Boid extends Entity {
             
             // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < 200) {
+            if (d > 0 && d < 250) {
                 neighbors.push(e);
                 flockMass = flockMass.add(e.pos);
+                flockAvoid = flockAvoid.add(e.pos.subtract(this.pos).normalize().multiply(5));
                 flockHeading = flockHeading.add(e.velocity);
+                
             }
         }
 
@@ -125,7 +128,9 @@ class Boid extends Entity {
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/neighbors.length);
-            this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
+            //this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(-10);
+            this.acceleration = this.acceleration.add(flockAvoid);
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
         }
         
@@ -135,9 +140,8 @@ class Boid extends Entity {
         }
 
         // euler approx motion TODO: RK4
-        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(100, 100, 100);
+        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(50, 50, 50);
         this.pos = this.pos.add(this.velocity.multiply(dt));
-
     }
 }
 
