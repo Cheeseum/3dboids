@@ -235,8 +235,8 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
         this.camera.position.z = this.world.radius * 1.2;
 
-        this.boidGeometry = new THREE.BoxGeometry( 5, 5, 5 );
-        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: false } );
+        this.boidGeometry = new THREE.CylinderGeometry(0.1, 15, 20, 4);
+        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
 
         var l = new THREE.DirectionalLight( 0xffffff, 0.5 );
         l.position.set(0, 1, 0);
@@ -257,6 +257,12 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         e.mesh.position.x = e.pos.x;
         e.mesh.position.y = e.pos.y;
         e.mesh.position.z = e.pos.z;
+
+        var v = e.velocity.normalize();
+        e.mesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(v.x, v.y, v.z)
+        );
     }
 }
     
