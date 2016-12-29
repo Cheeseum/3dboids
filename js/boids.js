@@ -126,13 +126,12 @@ class Boid extends Entity {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/neighbors.length);
             this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-100000 / Math.pow(this.pos.distanceTo(flockMass), 2));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(100));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
         }
         
         // bounds of the world (sphere)
-        var worldRadius = 500;
-        if (this.pos.magnitude() > worldRadius) {
-            this.acceleration = this.pos.normalize().multiply(-100);
+        if (this.pos.magnitude() > this.world.radius) {
+            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1000));
         }
 
         // euler approx motion TODO: RK4
@@ -142,9 +141,12 @@ class Boid extends Entity {
     }
 }
 
+// TODO: behavior objects, componentize or mutate onto each boid
+
 class World { 
     constructor() {
         this.entities = [];
+        this.radius = 1500;
     }
 
     step(t, dt) {
@@ -185,16 +187,16 @@ class Simulator {
 
 /* global THREE from three.min.js */
 class ThreeJSRenderer {
-    constructor() {
+    constructor(world) {
         this.renderer = new THREE.WebGLRenderer();
         this.renderer.setSize( window.innerWidth, window.innerHeight );
 
         this.scene = new THREE.Scene();
 
-        this.camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 10000 );
+        this.camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 5000 );
         this.camera.position.z = 1000;
 
-        this.world = null;
+        this.world = world;
         this.fps = 0.0;
 
     }
@@ -217,7 +219,7 @@ class ThreeJSRenderer {
     }
 
     drawWorld() {
-        this.scene.children.forEach((o) => this.scene.remove(o));
+        //this.scene.children.forEach((o) => this.scene.remove(o));
         for (var i=0; i < this.world.entities.length; ++i) {
             this.drawEntity(this.world.entities[i]);
         }
@@ -228,11 +230,22 @@ class ThreeJSRenderer {
 }
 
 class ThreeJSBoidsRenderer extends ThreeJSRenderer {
-    constructor() {
-        super()
+    constructor(world) {
+        super(world)
+
+        this.camera.position.z = this.world.radius * 1.2;
 
         this.boidGeometry = new THREE.BoxGeometry( 5, 5, 5 );
-        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } );
+        this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: false } );
+
+        var l = new THREE.DirectionalLight( 0xffffff, 0.5 );
+        l.position.set(0, 1, 0);
+        this.scene.add(l);
+
+        this.scene.add(new THREE.Mesh(
+            new THREE.SphereGeometry(this.world.radius),
+            new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } )
+        ));
     }
 
     drawEntity(e) {
@@ -253,7 +266,7 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 200; ++i) {
+    for (var i=0; i < 250; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
             Math.random() * 2000 - 1000,
@@ -266,11 +279,12 @@ function runBoids () {
     sim.world = world;
     sim.step();
 
-    var rend = new ThreeJSBoidsRenderer();
-    rend.world = world;
+    var rend = new ThreeJSBoidsRenderer(world);
     document.body.appendChild(rend.renderer.domElement);
 
     rend.draw();
+
+    var controls = new THREE.OrbitControls(rend.camera);
 }
 
 
