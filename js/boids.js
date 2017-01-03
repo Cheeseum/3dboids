@@ -94,13 +94,10 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-        //this.velocity = new Vector3(
-        //    Math.random() * 200 - 100,
-        //    Math.random() * 200 - 100,
-        //    Math.random() * 200 - 100
-        //);
         this.velocity = new Vector3(0,0,0);
         this.acceleration = new Vector3(0,0,0);
+
+        this.vision = 250;
     }
 
     step(t, dt) {
@@ -114,33 +111,32 @@ class Boid extends Entity {
             
             // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < 250) {
+            if (d > 0 && d < this.vision) {
                 neighbors.push(e);
                 flockMass = flockMass.add(e.pos);
-                flockAvoid = flockAvoid.add(e.pos.subtract(this.pos).normalize().multiply(1/(d*d)));
-                flockHeading = flockHeading.add(e.velocity);
+                flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
+                flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
                 
             }
         }
 
         // local center of geometry
-        flockMass = flockMass.multiply(1/neighbors.length);
+        flockMass.add(this.pos);
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
-            flockMass = flockMass.multiply(1/neighbors.length);
-            //this.acceleration = (flockMass.subtract(this.pos)).normalize().multiply(-Math.pow(10, 5) / Math.pow(this.pos.distanceTo(flockMass), 2));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(-10 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(100));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(50));
+            flockMass = flockMass.multiply(1/(neighbors.length+1));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(20 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(10));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(15));
         }
         
         // bounds of the world (sphere)
         if (this.pos.magnitude() > this.world.radius) {
-            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-1 * Math.pow(this.pos.magnitude() - this.world.radius, 2)));
+            this.velocity = this.velocity.add(this.pos.normalize().multiply(-1 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
         }
-
+    
         // euler approx motion TODO: RK4
-        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(100, 100, 100);
+        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(200, 200, 200);
         this.pos = this.pos.add(this.velocity.multiply(dt));
     }
 }
@@ -150,7 +146,7 @@ class Boid extends Entity {
 class World { 
     constructor() {
         this.entities = [];
-        this.radius = 1500;
+        this.radius = 2500;
     }
 
     step(t, dt) {
@@ -197,7 +193,7 @@ class ThreeJSRenderer {
 
         this.scene = new THREE.Scene();
 
-        this.camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 5000 );
+        this.camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 15000 );
         this.camera.position.z = 1000;
 
         this.world = world;
@@ -254,10 +250,10 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
     drawEntity(e) {
         if (e.mesh == undefined) {
-            e.mesh = new THREE.Mesh( this.boidGeometry, this.boidMaterial );
+            e.mesh = new THREE.Mesh(this.boidGeometry, this.boidMaterial);
+            this.scene.add(e.mesh);
         }
         
-        this.scene.add(e.mesh);
         e.mesh.position.x = e.pos.x;
         e.mesh.position.y = e.pos.y;
         e.mesh.position.z = e.pos.z;
@@ -276,7 +272,7 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 250; ++i) {
+    for (var i=0; i < 200; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
             Math.random() * 2000 - 1000,
