@@ -39,7 +39,7 @@ class Vector3 {
     }
 
     subtract(other) {
-        return this.add(this, other.multiply(-1));
+        return this.add(other.multiply(-1));
     }
 
     multiply(mul) {
