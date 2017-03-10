@@ -41,10 +41,15 @@ class Vector3 {
 
     distanceTo(other) {
         return Math.sqrt(
-            Math.pow(Math.abs(this.x - other.x), 2) +
-            Math.pow(Math.abs(this.y - other.y), 2) +
-            Math.pow(Math.abs(this.z - other.z), 2)
+            Math.pow(this.x - other.x, 2) +
+            Math.pow(this.y - other.y, 2) +
+            Math.pow(this.z - other.z, 2)
         );
+    }
+    distanceToSq(other) {
+        return Math.pow(this.x - other.x, 2) +
+               Math.pow(this.y - other.y, 2) +
+               Math.pow(this.z - other.z, 2)
     }
 
     clamp(x, y, z) {
@@ -58,7 +63,7 @@ class Vector3 {
 
 class Node {
     constructor(parentNode, centerx, centery, centerz, size, depth) {
-        this.MAX_DEPTH = 3;
+        this.MAX_DEPTH = 4;
 
         this.children = []
         this.childNodes = []
@@ -75,6 +80,8 @@ class Node {
         var newpos = this.size/4
 
         // make a child node for all (8) variants of +/- x/y/z
+        // these loops build them according to standard mathematics octants
+        // for x,y,z, 0 is +++, 1 is -++, 2 is +-+, 3 is --+, 4 is ++-, etc
         for (let iz = 1; iz > -2; iz -= 2) {
             for (let iy = 1; iy > -2; iy -= 2) {
                 for (let ix = 1; ix > -2; ix -= 2) {
@@ -125,22 +132,33 @@ class Node {
         }
     }
 
-    // Find objects in a given radius around a point
+    // Find and return a list of objects in a given spherical volume
     search(point, radius) {
         var found = [];
 
         if (this.childNodes.length > 0) {
-            if (point.subtract(this.center).magnitude < radius) {
-                for (let quad of this.childNodes) {
-                    found = found.concat(search(point, radius));
+            for (let quad of this.childNodes) {
+                var qsize = quad.size / 2;
+                var x = Math.max(quad.center.x - qsize, Math.min(point.x, quad.center.x + qsize)) - point.x;
+                var y = Math.max(quad.center.y - qsize, Math.min(point.y, quad.center.y + qsize)) - point.y;
+                var z = Math.max(quad.center.z - qsize, Math.min(point.z, quad.center.z + qsize)) - point.z;
+                if (x*x + y*y + z*z < radius*radius) {
+                    found = found.concat(quad.search(point, radius));
                 }
             }
         }
 
-        return found.concat(this.children);
+        for (let c of this.children) {
+            if (c.pos.distanceToSq(point) < radius * radius) {
+                found.push(c);
+            }
+        }
+
+        return found;
     }
 
-    // returns a list of all nodes in all children
+    // Return a list of all nodes in all children
+    // primarily used for rendering the tree
     getNodes() {
         var found = [];
 

@@ -14,26 +14,23 @@ class Boid extends Entity {
         this.velocity = new Vector3(0,0,0);
         this.acceleration = new Vector3(0,0,0);
 
-        this.vision = 250;
+        this.vision = 150;
     }
 
     step(t, dt) {
-        var neighbors = [];
-        var flockMass = new Vector3(0,0,0);
-        var flockAvoid = new Vector3(0,0,0);
-        var flockHeading = new Vector3(0,0,0);
+        var neighbors = this.world.octree.search(this.pos, this.vision);
+        var flockMass = new Vector3(0,0,0);     // local center of geometry
+        var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
+        var flockHeading = new Vector3(0,0,0);  // average heading of flock
+        
+        for (var i=0; i < neighbors.length; ++i) {
+            var e = neighbors[i];
 
-        for (var i=0; i < this.world.entities.length; ++i) {
-            var e = this.world.entities[i];
-            
-            // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < this.vision) {
-                neighbors.push(e);
+            if (d > 0) {
                 flockMass = flockMass.add(e.pos);
                 flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
                 flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
-                
             }
         }
 
@@ -42,9 +39,9 @@ class Boid extends Entity {
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/(neighbors.length+1));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(20 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(10));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(15));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(20));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(25));
         }
         
         // bounds of the world (sphere)
@@ -89,7 +86,7 @@ class Simulator {
         this.new_time = 0.0;
         this.accumulator = 0.0;
         this.t = 0.0;
-        this.dt = 0.01;
+        this.dt = 0.1;
     }
     
     step() {
@@ -218,12 +215,12 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 200; ++i) {
+    for (var i=0; i < 1000; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500
         );
         world.entities.push(b);
     }
