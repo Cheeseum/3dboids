@@ -11,3 +11,4 @@ This just simulates a few hundred boids in a spherical boundary. You can pan and
 ## Future Plans
 * Add octree for spaitial locationing to increase performance with more boids.
 * Allow insertion of obstacle spheres for some more dynamic events.
+* Give boids personalized behaviors (aggressive alpha boids, lazy beta boids)
