@@ -138,6 +138,7 @@ class Node {
 
         if (this.childNodes.length > 0) {
             for (let quad of this.childNodes) {
+                // get the furthest of (point, quad walls) along each axis
                 var qsize = quad.size / 2;
                 var x = Math.max(quad.center.x - qsize, Math.min(point.x, quad.center.x + qsize)) - point.x;
                 var y = Math.max(quad.center.y - qsize, Math.min(point.y, quad.center.y + qsize)) - point.y;

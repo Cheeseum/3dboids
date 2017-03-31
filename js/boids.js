@@ -86,7 +86,12 @@ class Simulator {
         this.new_time = 0.0;
         this.accumulator = 0.0;
         this.t = 0.0;
-        this.dt = 0.1;
+
+        // step size
+        // lower = more accurate but lower performance
+        // higher = less accurate by higher performance
+        // 0.01 works for ~200 boids, 0.05 works for ~500
+        this.dt = 0.05;
     }
     
     step() {
@@ -106,7 +111,7 @@ class Simulator {
 
 }
 
-/* global THREE from three.min.js */
+// global THREE from three.min.js
 class ThreeJSRenderer {
     constructor(world) {
         this.renderer = new THREE.WebGLRenderer();
@@ -143,6 +148,7 @@ class ThreeJSRenderer {
     drawWorld() {
         //this.scene.children.forEach((o) => this.scene.remove(o));
 
+        // render the octree quads (for debugging)
         //FIXME: this flag doesn't belong here
         var renderOct = false;
         if (renderOct) {
@@ -163,6 +169,7 @@ class ThreeJSRenderer {
             }
         }
 
+        // render each entity
         for (var i=0; i < this.world.entities.length; ++i) {
             this.drawEntity(this.world.entities[i]);
         }
@@ -185,6 +192,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         l.position.set(0, 1, 0);
         this.scene.add(l);
 
+        // draws a world boundary sphere
         this.scene.add(new THREE.Mesh(
             new THREE.SphereGeometry(this.world.radius),
             new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } )
@@ -215,7 +223,7 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 1000; ++i) {
+    for (var i=0; i < 500; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
             Math.random() * 3000 - 1500,
