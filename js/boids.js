@@ -1,90 +1,11 @@
-class Vector2 {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-    }
-
-    add(other) {
-        return new Vector2(
-            this.x + other.x,
-            this.y + other.y
-        );
-    }
-
-    subtract(other) {
-        return add(this, other.multiply(-1));
-    }
-
-    multiply(mul) {
-        return new Vector2(
-            this.x * mul,
-            this.y * mul
-        );
-    }
-}
-
-class Vector3 {
-    constructor(x, y, z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
-
-    add(other) {
-        return new Vector3(
-            this.x + other.x,
-            this.y + other.y,
-            this.z + other.z
-        );
-    }
-
-    subtract(other) {
-        return this.add(other.multiply(-1));
-    }
-
-    multiply(mul) {
-        return new Vector3(
-            this.x * mul,
-            this.y * mul,
-            this.z * mul
-        );
-    }
-
-    magnitude() {
-        return Math.sqrt(
-            Math.pow(this.x, 2) +
-            Math.pow(this.y, 2) +
-            Math.pow(this.z, 2)
-        );
-    }
-
-    normalize() {
-        var m = this.magnitude();
-        if (m == 0) { m = 1 }
-        return new Vector3(this.x / m, this.y / m, this.z / m);
-    }
-
-    distanceTo(other) {
-        return Math.sqrt(
-            Math.pow(Math.abs(this.x - other.x), 2) +
-            Math.pow(Math.abs(this.y - other.y), 2) +
-            Math.pow(Math.abs(this.z - other.z), 2)
-        );
-    }
-
-    clamp(x, y, z) {
-        return new Vector3(
-            Math.max(Math.min(this.x, x), -x),
-            Math.max(Math.min(this.y, y), -y),
-            Math.max(Math.min(this.z, z), -z)
-        );
-    }
-}
-
 class Entity {
     constructor(world) {
         this.world = world;
         this.pos = new Vector3(0, 0, 0);
+        this.velocity = new Vector3(0,0,0);
+        this.acceleration = new Vector3(0,0,0);
+
+        this.radius = 1;
     }
 
     step(t, dt) {
@@ -94,29 +15,37 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-        this.velocity = new Vector3(0,0,0);
-        this.acceleration = new Vector3(0,0,0);
 
-        this.vision = 250;
+        this.vision = 200;
     }
 
     step(t, dt) {
-        var neighbors = [];
-        var flockMass = new Vector3(0,0,0);
-        var flockAvoid = new Vector3(0,0,0);
-        var flockHeading = new Vector3(0,0,0);
+        var neighbors = this.world.octree.search(this.pos, this.vision);
+        var flockMass = new Vector3(0,0,0);     // local center of geometry
+        var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
+        var flockHeading = new Vector3(0,0,0);  // average heading of flock
 
-        for (var i=0; i < this.world.entities.length; ++i) {
-            var e = this.world.entities[i];
-            
-            // calculate the local center of geometry
+        var collideAvoid = new Vector3(0,0,0); // heading away from obstacles
+        
+        for (var i=0; i < neighbors.length; ++i) {
+            var e = neighbors[i];
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < this.vision) {
-                neighbors.push(e);
-                flockMass = flockMass.add(e.pos);
-                flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
-                flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
-                
+            
+            if (d - e.radius > 0) {
+                if (e instanceof Collidable) {
+                    // give a nudge along the normal but in the direction of the current heading
+                    // drop the effect off with inverse square of distance to the outer shell
+                    collideAvoid = collideAvoid.add(
+                        this.pos.subtract(e.pos).multiply(15).add(this.velocity).normalize().multiply(1/((d-e.radius)*(d-e.radius)))
+                    );   
+                } else {
+                    flockMass = flockMass.add(e.pos);
+                    
+                    // accumulate directions away from neighbors and towards their heading
+                    // inverse square distance fall-off in each case 
+                    flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
+                    flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
+                }
             }
         }
 
@@ -124,10 +53,12 @@ class Boid extends Entity {
         flockMass.add(this.pos);
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
+            // also modify our acceleration based on each behavior modifying vector
             flockMass = flockMass.multiply(1/(neighbors.length+1));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(20 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(10));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(15));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(40));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(45));
+            this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(50));
         }
         
         // bounds of the world (sphere)
@@ -135,21 +66,35 @@ class Boid extends Entity {
             this.velocity = this.velocity.add(this.pos.normalize().multiply(-1 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
         }
     
-        // euler approx motion TODO: RK4
+        // euler approx motion TODO: RK4?
         this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(200, 200, 200);
         this.pos = this.pos.add(this.velocity.multiply(dt));
     }
 }
 
-// TODO: behavior objects, componentize or mutate onto each boid
+// FIXME: this class is acting more of an identifier now and isnt very useful
+class Collidable extends Entity {
+    constructor(world, radius) {
+        super(world);
+        this.radius = radius;
+    }
+}
 
+// TODO: behavior objects, componentize or mutate onto each boid
 class World { 
     constructor() {
         this.entities = [];
         this.radius = 2500;
+
+        this.octree = new Octree(this.radius*2);
     }
 
     step(t, dt) {
+        this.octree = new Octree(this.radius*2);
+        for (var i=0; i < this.entities.length; ++i) {
+            this.octree.insert(this.entities[i]);
+        }
+
         for (var i=0; i < this.entities.length; ++i) {
             var e = this.entities[i];
             e.step(t, dt);
@@ -165,7 +110,12 @@ class Simulator {
         this.new_time = 0.0;
         this.accumulator = 0.0;
         this.t = 0.0;
-        this.dt = 0.01;
+
+        // step size
+        // lower = more accurate but lower performance
+        // higher = less accurate by higher performance
+        // 0.01 works for ~200 boids, 0.05 works for ~500
+        this.dt = 0.05;
     }
     
     step() {
@@ -185,7 +135,7 @@ class Simulator {
 
 }
 
-/* global THREE from three.min.js */
+// global THREE from three.min.js
 class ThreeJSRenderer {
     constructor(world) {
         this.renderer = new THREE.WebGLRenderer();
@@ -198,7 +148,8 @@ class ThreeJSRenderer {
 
         this.world = world;
         this.fps = 0.0;
-
+        
+        this.octreeMat = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
     }
 
     draw() {
@@ -220,6 +171,29 @@ class ThreeJSRenderer {
 
     drawWorld() {
         //this.scene.children.forEach((o) => this.scene.remove(o));
+
+        // render the octree quads (for debugging)
+        //FIXME: this flag doesn't belong here
+        var renderOct = false;
+        if (renderOct) {
+            var nodes = this.world.octree.getNodes();
+            for (var i=0; i < nodes.length; ++i) {
+                var node = nodes[i];
+                if (node.mesh == undefined) {
+                    node.mesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(node.size, node.size, node.size),
+                        this.octreeMat
+                    );
+                    node.mesh.position.x = node.center.x;
+                    node.mesh.position.y = node.center.y;
+                    node.mesh.position.z = node.center.z;
+
+                    this.scene.add(node.mesh);
+                }
+            }
+        }
+
+        // render each entity
         for (var i=0; i < this.world.entities.length; ++i) {
             this.drawEntity(this.world.entities[i]);
         }
@@ -237,20 +211,47 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
         this.boidGeometry = new THREE.CylinderGeometry(0.1, 15, 20, 4);
         this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
+        this.collidableGeometry = new THREE.MeshBasicMaterial( { color: 0x0000cc, wireframe: false } );
 
         var l = new THREE.DirectionalLight( 0xffffff, 0.5 );
         l.position.set(0, 1, 0);
         this.scene.add(l);
 
+        // draws a world boundary sphere
         this.scene.add(new THREE.Mesh(
             new THREE.SphereGeometry(this.world.radius),
-            new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } )
+            new THREE.MeshBasicMaterial( { color: 0x555555, wireframe: true } )
         ));
+
+        /* experiment of a different bounds curve
+        var boundscurve = new THREE.EllipseCurve(0, 0, this.world.radius, this.world.radius, 0, 2*Math.PI, false, 0);
+        var boundspath = new THREE.Path( boundscurve.getPoints(25) );
+        var boundsgeo = boundspath.createPointsGeometry( 25 );
+        this.bounds1 = new THREE.Line(
+            boundsgeo,
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+        this.bounds2 = new THREE.Line(
+            boundsgeo,
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+        this.bounds2.quaternion.setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            Math.PI / 2
+        );
+        this.scene.add(this.bounds1);
+        this.scene.add(this.bounds2);
+        */
     }
 
     drawEntity(e) {
         if (e.mesh == undefined) {
-            e.mesh = new THREE.Mesh(this.boidGeometry, this.boidMaterial);
+            if (e instanceof Boid) {
+                e.mesh = new THREE.Mesh(this.boidGeometry, this.boidMaterial);
+            } else if (e instanceof Collidable) {
+                e.mesh = new THREE.Mesh(new THREE.SphereGeometry(e.radius), this.collidableGeometry);
+            }
+
             this.scene.add(e.mesh);
         }
         
@@ -258,6 +259,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         e.mesh.position.y = e.pos.y;
         e.mesh.position.z = e.pos.z;
 
+        // magic to point boids in toward heading
         var v = e.velocity.normalize();
         e.mesh.quaternion.setFromUnitVectors(
             new THREE.Vector3(0, 1, 0),
@@ -272,12 +274,29 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 200; ++i) {
+    // make random boids, then send them in random headings
+    for (var i=0; i < 500; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500
+        );
+        b.velocity = new Vector3(
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10
+        );
+        world.entities.push(b);
+    }
+
+    // make random obstacle spheres
+    for (var i=0; i < 50; ++i) {
+        var b = new Collidable(world, 200);
+        b.pos = new Vector3(
+            Math.random() * 3500 - 1750,
+            Math.random() * 3500 - 1750,
+            Math.random() * 3500 - 1750
         );
         world.entities.push(b);
     }
@@ -291,9 +310,12 @@ function runBoids () {
     rend.draw();
 
     var controls = new THREE.OrbitControls(rend.camera);
+
+    // expose the simulator for debugging
+    window.sim = sim;
 }
 
 
 window.onload = function() {
-    runBoids(null);
+    runBoids();
 };
