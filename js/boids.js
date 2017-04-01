@@ -16,7 +16,7 @@ class Boid extends Entity {
     constructor(world) {
         super(world);
 
-        this.vision = 300;
+        this.vision = 200;
     }
 
     step(t, dt) {
@@ -33,12 +33,16 @@ class Boid extends Entity {
             
             if (d - e.radius > 0) {
                 if (e instanceof Collidable) {
+                    // give a nudge along the normal but in the direction of the current heading
+                    // drop the effect off with inverse square of distance to the outer shell
                     collideAvoid = collideAvoid.add(
-                        //this.velocity.cross(this.pos.subtract(e.pos).normalize().multiply(1/((d-e.radius)*(d-e.radius))))
                         this.pos.subtract(e.pos).multiply(15).add(this.velocity).normalize().multiply(1/((d-e.radius)*(d-e.radius)))
                     );   
                 } else {
                     flockMass = flockMass.add(e.pos);
+                    
+                    // accumulate directions away from neighbors and towards their heading
+                    // inverse square distance fall-off in each case 
                     flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
                     flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
                 }
@@ -49,10 +53,11 @@ class Boid extends Entity {
         flockMass.add(this.pos);
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
+            // also modify our acceleration based on each behavior modifying vector
             flockMass = flockMass.multiply(1/(neighbors.length+1));
             this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(20));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(25));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(40));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(45));
             this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(50));
         }
         
@@ -61,12 +66,13 @@ class Boid extends Entity {
             this.velocity = this.velocity.add(this.pos.normalize().multiply(-1 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
         }
     
-        // euler approx motion TODO: RK4
+        // euler approx motion TODO: RK4?
         this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(200, 200, 200);
         this.pos = this.pos.add(this.velocity.multiply(dt));
     }
 }
 
+// FIXME: this class is acting more of an identifier now and isnt very useful
 class Collidable extends Entity {
     constructor(world, radius) {
         super(world);
@@ -75,7 +81,6 @@ class Collidable extends Entity {
 }
 
 // TODO: behavior objects, componentize or mutate onto each boid
-
 class World { 
     constructor() {
         this.entities = [];
@@ -215,8 +220,28 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         // draws a world boundary sphere
         this.scene.add(new THREE.Mesh(
             new THREE.SphereGeometry(this.world.radius),
-            new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } )
+            new THREE.MeshBasicMaterial( { color: 0x555555, wireframe: true } )
         ));
+
+        /* experiment of a different bounds curve
+        var boundscurve = new THREE.EllipseCurve(0, 0, this.world.radius, this.world.radius, 0, 2*Math.PI, false, 0);
+        var boundspath = new THREE.Path( boundscurve.getPoints(25) );
+        var boundsgeo = boundspath.createPointsGeometry( 25 );
+        this.bounds1 = new THREE.Line(
+            boundsgeo,
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+        this.bounds2 = new THREE.Line(
+            boundsgeo,
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+        this.bounds2.quaternion.setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            Math.PI / 2
+        );
+        this.scene.add(this.bounds1);
+        this.scene.add(this.bounds2);
+        */
     }
 
     drawEntity(e) {
@@ -234,6 +259,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         e.mesh.position.y = e.pos.y;
         e.mesh.position.z = e.pos.z;
 
+        // magic to point boids in toward heading
         var v = e.velocity.normalize();
         e.mesh.quaternion.setFromUnitVectors(
             new THREE.Vector3(0, 1, 0),
@@ -248,6 +274,7 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
+    // make random boids, then send them in random headings
     for (var i=0; i < 500; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
@@ -256,19 +283,20 @@ function runBoids () {
             Math.random() * 3000 - 1500
         );
         b.velocity = new Vector3(
-            20,
-            20,
-            20
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10,
+            Math.random() * 20 - 10
         );
         world.entities.push(b);
     }
 
+    // make random obstacle spheres
     for (var i=0; i < 50; ++i) {
         var b = new Collidable(world, 200);
         b.pos = new Vector3(
-            Math.random() * 4000 - 2000,
-            Math.random() * 4000 - 2000,
-            Math.random() * 4000 - 2000
+            Math.random() * 3500 - 1750,
+            Math.random() * 3500 - 1750,
+            Math.random() * 3500 - 1750
         );
         world.entities.push(b);
     }
@@ -289,5 +317,5 @@ function runBoids () {
 
 
 window.onload = function() {
-    runBoids(null);
+    runBoids();
 };
