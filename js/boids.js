@@ -1,86 +1,3 @@
-class Vector2 {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-    }
-
-    add(other) {
-        return new Vector2(
-            this.x + other.x,
-            this.y + other.y
-        );
-    }
-
-    subtract(other) {
-        return add(this, other.multiply(-1));
-    }
-
-    multiply(mul) {
-        return new Vector2(
-            this.x * mul,
-            this.y * mul
-        );
-    }
-}
-
-class Vector3 {
-    constructor(x, y, z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
-
-    add(other) {
-        return new Vector3(
-            this.x + other.x,
-            this.y + other.y,
-            this.z + other.z
-        );
-    }
-
-    subtract(other) {
-        return this.add(other.multiply(-1));
-    }
-
-    multiply(mul) {
-        return new Vector3(
-            this.x * mul,
-            this.y * mul,
-            this.z * mul
-        );
-    }
-
-    magnitude() {
-        return Math.sqrt(
-            Math.pow(this.x, 2) +
-            Math.pow(this.y, 2) +
-            Math.pow(this.z, 2)
-        );
-    }
-
-    normalize() {
-        var m = this.magnitude();
-        if (m == 0) { m = 1 }
-        return new Vector3(this.x / m, this.y / m, this.z / m);
-    }
-
-    distanceTo(other) {
-        return Math.sqrt(
-            Math.pow(Math.abs(this.x - other.x), 2) +
-            Math.pow(Math.abs(this.y - other.y), 2) +
-            Math.pow(Math.abs(this.z - other.z), 2)
-        );
-    }
-
-    clamp(x, y, z) {
-        return new Vector3(
-            Math.max(Math.min(this.x, x), -x),
-            Math.max(Math.min(this.y, y), -y),
-            Math.max(Math.min(this.z, z), -z)
-        );
-    }
-}
-
 class Entity {
     constructor(world) {
         this.world = world;
@@ -97,26 +14,23 @@ class Boid extends Entity {
         this.velocity = new Vector3(0,0,0);
         this.acceleration = new Vector3(0,0,0);
 
-        this.vision = 250;
+        this.vision = 150;
     }
 
     step(t, dt) {
-        var neighbors = [];
-        var flockMass = new Vector3(0,0,0);
-        var flockAvoid = new Vector3(0,0,0);
-        var flockHeading = new Vector3(0,0,0);
+        var neighbors = this.world.octree.search(this.pos, this.vision);
+        var flockMass = new Vector3(0,0,0);     // local center of geometry
+        var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
+        var flockHeading = new Vector3(0,0,0);  // average heading of flock
+        
+        for (var i=0; i < neighbors.length; ++i) {
+            var e = neighbors[i];
 
-        for (var i=0; i < this.world.entities.length; ++i) {
-            var e = this.world.entities[i];
-            
-            // calculate the local center of geometry
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0 && d < this.vision) {
-                neighbors.push(e);
+            if (d > 0) {
                 flockMass = flockMass.add(e.pos);
                 flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
                 flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
-                
             }
         }
 
@@ -125,9 +39,9 @@ class Boid extends Entity {
         if (neighbors.length > 0) {
             // if we have neighbors, accelerate to the local CoG
             flockMass = flockMass.multiply(1/(neighbors.length+1));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(20 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(10));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(15));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(20));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(25));
         }
         
         // bounds of the world (sphere)
@@ -147,9 +61,16 @@ class World {
     constructor() {
         this.entities = [];
         this.radius = 2500;
+
+        this.octree = new Octree(this.radius*2);
     }
 
     step(t, dt) {
+        this.octree = new Octree(this.radius*2);
+        for (var i=0; i < this.entities.length; ++i) {
+            this.octree.insert(this.entities[i]);
+        }
+
         for (var i=0; i < this.entities.length; ++i) {
             var e = this.entities[i];
             e.step(t, dt);
@@ -165,7 +86,12 @@ class Simulator {
         this.new_time = 0.0;
         this.accumulator = 0.0;
         this.t = 0.0;
-        this.dt = 0.01;
+
+        // step size
+        // lower = more accurate but lower performance
+        // higher = less accurate by higher performance
+        // 0.01 works for ~200 boids, 0.05 works for ~500
+        this.dt = 0.05;
     }
     
     step() {
@@ -185,7 +111,7 @@ class Simulator {
 
 }
 
-/* global THREE from three.min.js */
+// global THREE from three.min.js
 class ThreeJSRenderer {
     constructor(world) {
         this.renderer = new THREE.WebGLRenderer();
@@ -198,7 +124,8 @@ class ThreeJSRenderer {
 
         this.world = world;
         this.fps = 0.0;
-
+        
+        this.octreeMat = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
     }
 
     draw() {
@@ -220,6 +147,29 @@ class ThreeJSRenderer {
 
     drawWorld() {
         //this.scene.children.forEach((o) => this.scene.remove(o));
+
+        // render the octree quads (for debugging)
+        //FIXME: this flag doesn't belong here
+        var renderOct = false;
+        if (renderOct) {
+            var nodes = this.world.octree.getNodes();
+            for (var i=0; i < nodes.length; ++i) {
+                var node = nodes[i];
+                if (node.mesh == undefined) {
+                    node.mesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(node.size, node.size, node.size),
+                        this.octreeMat
+                    );
+                    node.mesh.position.x = node.center.x;
+                    node.mesh.position.y = node.center.y;
+                    node.mesh.position.z = node.center.z;
+
+                    this.scene.add(node.mesh);
+                }
+            }
+        }
+
+        // render each entity
         for (var i=0; i < this.world.entities.length; ++i) {
             this.drawEntity(this.world.entities[i]);
         }
@@ -242,6 +192,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         l.position.set(0, 1, 0);
         this.scene.add(l);
 
+        // draws a world boundary sphere
         this.scene.add(new THREE.Mesh(
             new THREE.SphereGeometry(this.world.radius),
             new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true } )
@@ -272,12 +223,12 @@ function runBoids () {
     var sim = new Simulator();
     var world = new World();
 
-    for (var i=0; i < 200; ++i) {
+    for (var i=0; i < 500; ++i) {
         var b = new Boid(world);
         b.pos = new Vector3(
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000,
-            Math.random() * 2000 - 1000
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500,
+            Math.random() * 3000 - 1500
         );
         world.entities.push(b);
     }
@@ -291,6 +242,9 @@ function runBoids () {
     rend.draw();
 
     var controls = new THREE.OrbitControls(rend.camera);
+
+    // expose the simulator for debugging
+    window.sim = sim;
 }
 
 
