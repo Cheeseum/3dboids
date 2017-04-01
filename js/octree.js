@@ -46,10 +46,19 @@ class Vector3 {
             Math.pow(this.z - other.z, 2)
         );
     }
+
     distanceToSq(other) {
         return Math.pow(this.x - other.x, 2) +
                Math.pow(this.y - other.y, 2) +
                Math.pow(this.z - other.z, 2)
+    }
+
+    cross(other) {
+        return new Vector3(
+            other.y * this.z - other.z * this.y,
+            other.z * this.x - other.x * this.z,
+            other.x * this.y - other.y * this.x
+        );
     }
 
     clamp(x, y, z) {
@@ -106,7 +115,8 @@ class Node {
             this.subdivide();
         }
         
-        if (this.childNodes.length > 0) { 
+        // recurse into child quads if obj is small enough to fit
+        if (this.childNodes.length > 0 && obj.radius < this.size/4) { 
             // use center of subdivision as std position for object pos
             var fromCenter = obj.pos.subtract(this.center);
 
@@ -150,7 +160,10 @@ class Node {
         }
 
         for (let c of this.children) {
-            if (c.pos.distanceToSq(point) < radius * radius) {
+            // painful way of doing (point.distanceTo(c.pos) - c.radius)^2 to avoid a sqrt
+            // performance improvement seems minimal at best, needs further testing
+            //if (point.distanceToSq(c.pos.add(point.subtract(c.pos).normalize().multiply(c.radius))) < radius * radius) {
+            if (point.distanceTo(c.pos) - c.radius < radius) {
                 found.push(c);
             }
         }

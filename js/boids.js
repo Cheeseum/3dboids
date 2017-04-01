@@ -2,6 +2,10 @@ class Entity {
     constructor(world) {
         this.world = world;
         this.pos = new Vector3(0, 0, 0);
+        this.velocity = new Vector3(0,0,0);
+        this.acceleration = new Vector3(0,0,0);
+
+        this.radius = 1;
     }
 
     step(t, dt) {
@@ -11,10 +15,8 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-        this.velocity = new Vector3(0,0,0);
-        this.acceleration = new Vector3(0,0,0);
 
-        this.vision = 150;
+        this.vision = 300;
     }
 
     step(t, dt) {
@@ -22,15 +24,24 @@ class Boid extends Entity {
         var flockMass = new Vector3(0,0,0);     // local center of geometry
         var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
         var flockHeading = new Vector3(0,0,0);  // average heading of flock
+
+        var collideAvoid = new Vector3(0,0,0); // heading away from obstacles
         
         for (var i=0; i < neighbors.length; ++i) {
             var e = neighbors[i];
-
             var d = this.pos.distanceTo(e.pos);
-            if (d > 0) {
-                flockMass = flockMass.add(e.pos);
-                flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
-                flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
+            
+            if (d - e.radius > 0) {
+                if (e instanceof Collidable) {
+                    collideAvoid = collideAvoid.add(
+                        //this.velocity.cross(this.pos.subtract(e.pos).normalize().multiply(1/((d-e.radius)*(d-e.radius))))
+                        this.pos.subtract(e.pos).multiply(15).add(this.velocity).normalize().multiply(1/((d-e.radius)*(d-e.radius)))
+                    );   
+                } else {
+                    flockMass = flockMass.add(e.pos);
+                    flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
+                    flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
+                }
             }
         }
 
@@ -42,6 +53,7 @@ class Boid extends Entity {
             this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
             this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(20));
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(25));
+            this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(50));
         }
         
         // bounds of the world (sphere)
@@ -52,6 +64,13 @@ class Boid extends Entity {
         // euler approx motion TODO: RK4
         this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(200, 200, 200);
         this.pos = this.pos.add(this.velocity.multiply(dt));
+    }
+}
+
+class Collidable extends Entity {
+    constructor(world, radius) {
+        super(world);
+        this.radius = radius;
     }
 }
 
@@ -187,6 +206,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
         this.boidGeometry = new THREE.CylinderGeometry(0.1, 15, 20, 4);
         this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
+        this.collidableGeometry = new THREE.MeshBasicMaterial( { color: 0x0000cc, wireframe: false } );
 
         var l = new THREE.DirectionalLight( 0xffffff, 0.5 );
         l.position.set(0, 1, 0);
@@ -201,7 +221,12 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
     drawEntity(e) {
         if (e.mesh == undefined) {
-            e.mesh = new THREE.Mesh(this.boidGeometry, this.boidMaterial);
+            if (e instanceof Boid) {
+                e.mesh = new THREE.Mesh(this.boidGeometry, this.boidMaterial);
+            } else if (e instanceof Collidable) {
+                e.mesh = new THREE.Mesh(new THREE.SphereGeometry(e.radius), this.collidableGeometry);
+            }
+
             this.scene.add(e.mesh);
         }
         
@@ -229,6 +254,21 @@ function runBoids () {
             Math.random() * 3000 - 1500,
             Math.random() * 3000 - 1500,
             Math.random() * 3000 - 1500
+        );
+        b.velocity = new Vector3(
+            20,
+            20,
+            20
+        );
+        world.entities.push(b);
+    }
+
+    for (var i=0; i < 50; ++i) {
+        var b = new Collidable(world, 200);
+        b.pos = new Vector3(
+            Math.random() * 4000 - 2000,
+            Math.random() * 4000 - 2000,
+            Math.random() * 4000 - 2000
         );
         world.entities.push(b);
     }
