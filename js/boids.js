@@ -15,12 +15,10 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-
-        this.vision = 200;
     }
 
     step(t, dt) {
-        var neighbors = this.world.octree.search(this.pos, this.vision);
+        var neighbors = this.world.octree.search(this.pos, this.world.behaviorWeights.vision);
         var flockMass = new Vector3(0,0,0);     // local center of geometry
         var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
         var flockHeading = new Vector3(0,0,0);  // average heading of flock
@@ -90,6 +88,7 @@ class World {
         
         // defining the default argument here for neatness' sake
         this.behaviorWeights = behaviorWeights || {
+            vision: 200,
             cohesion: 20,
             separation: 20,
             alignment: 20,
@@ -290,6 +289,7 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 function runBoids () {
     var sim = new Simulator();
     var world = new World({
+        vision: 200,
         cohesion: 70,
         separation: 20,
         alignment: 50,
@@ -349,6 +349,7 @@ window.onload = function() {
     guiWorld.add(sim.world, "radius", 100, 10000);
 
     var guiBehavior = gui.addFolder("Behavior");
+    guiBehavior.add(sim.world.behaviorWeights, "vision", 0, 400);
     guiBehavior.add(sim.world.behaviorWeights, "cohesion", 0, 1000);
     guiBehavior.add(sim.world.behaviorWeights, "separation", 0, 1000);
     guiBehavior.add(sim.world.behaviorWeights, "alignment", 0, 1000);
