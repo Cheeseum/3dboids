@@ -1,9 +1,25 @@
 <!doctype html>
 <html>
-<body>
-</body>
+<head>
+<style type="text/css">
+    h1 { margin: 0; padding: 0; font-size: 2em }
+    p { margin: 1pc 0; padding: 0; }
+    div#content {
+        position: fixed;
+    }
+
+    div#content-controls {
+        position: absolute;
+        right: 0;
+    }
+
+    .dg .cr.number { border-left-color: #00ff00 !important; }
+    .dg .cr.number input[type=text] { color: #00ff00 !important; }
+    .slider-fg { background: #00ff00 !important; }
+</style>
 <script type="text/javascript" src="js/lib/three.min.js"></script>
 <script type="text/javascript" src="js/lib/OrbitControls.js"></script>
+<script type="text/javascript" src="js/lib/dat.gui.min.js"></script>
 <script type="text/javascript" src="js/octree.js"></script>
 <script type="text/javascript" src="js/boids.js"></script>
 <script type="text/javascript">
@@ -18,5 +34,14 @@
             };
     })();
 </script>
+</head>
+<body>
+    <h1>Boids</h1>
+    <p>Left click and drag to move, Right click to pan, Mouse wheel to zoom.</p>
+    <div id="content">
+    <div id="content-controls">
+    </div>
+    </div>
+</body>
 </html>
 

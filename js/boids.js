@@ -55,15 +55,15 @@ class Boid extends Entity {
             // if we have neighbors, accelerate to the local CoG
             // also modify our acceleration based on each behavior modifying vector
             flockMass = flockMass.multiply(1/(neighbors.length+1));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(40 / Math.pow(this.pos.distanceTo(flockMass),2));
-            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(40));
-            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(45));
-            this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(50));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(this.world.behaviorWeights.cohesion / this.pos.distanceToSq(flockMass));
+            this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(this.world.behaviorWeights.separation));
+            this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(this.world.behaviorWeights.alignment));
+            this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(this.world.behaviorWeights.collide));
         }
         
         // bounds of the world (sphere)
         if (this.pos.magnitude() > this.world.radius) {
-            this.velocity = this.velocity.add(this.pos.normalize().multiply(-1 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
+            this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-100 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
         }
     
         // euler approx motion TODO: RK4?
@@ -82,11 +82,20 @@ class Collidable extends Entity {
 
 // TODO: behavior objects, componentize or mutate onto each boid
 class World { 
-    constructor() {
+    constructor(behaviorWeights = undefined) {
         this.entities = [];
         this.radius = 2500;
 
         this.octree = new Octree(this.radius*2);
+        
+        // defining the default argument here for neatness' sake
+        this.behaviorWeights = behaviorWeights || {
+            cohesion: 20,
+            separation: 20,
+            alignment: 20,
+            collide: 20
+
+        }
     }
 
     step(t, dt) {
@@ -137,13 +146,13 @@ class Simulator {
 
 // global THREE from three.min.js
 class ThreeJSRenderer {
-    constructor(world) {
+    constructor(world, width=window.innerWidth, height=window.innerHeight) {
         this.renderer = new THREE.WebGLRenderer();
-        this.renderer.setSize( window.innerWidth, window.innerHeight );
+        this.renderer.setSize( width, height );
 
         this.scene = new THREE.Scene();
 
-        this.camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 15000 );
+        this.camera = new THREE.PerspectiveCamera( 75, width / height, 0.1, 15000 );
         this.camera.position.z = 1000;
 
         this.world = world;
@@ -204,10 +213,10 @@ class ThreeJSRenderer {
 }
 
 class ThreeJSBoidsRenderer extends ThreeJSRenderer {
-    constructor(world) {
-        super(world)
+    constructor(world, width=window.innerWidth, height=window.innerHeight) {
+        super(world, width, height)
 
-        this.camera.position.z = this.world.radius * 1.2;
+        this.camera.position.z = this.world.radius * 2;
 
         this.boidGeometry = new THREE.CylinderGeometry(0.1, 15, 20, 4);
         this.boidMaterial = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
@@ -218,10 +227,11 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         this.scene.add(l);
 
         // draws a world boundary sphere
-        this.scene.add(new THREE.Mesh(
-            new THREE.SphereGeometry(this.world.radius),
+        this.worldSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(1),
             new THREE.MeshBasicMaterial( { color: 0x555555, wireframe: true } )
-        ));
+        );
+        this.scene.add(this.worldSphere);
 
         /* experiment of a different bounds curve
         var boundscurve = new THREE.EllipseCurve(0, 0, this.world.radius, this.world.radius, 0, 2*Math.PI, false, 0);
@@ -242,6 +252,13 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
         this.scene.add(this.bounds1);
         this.scene.add(this.bounds2);
         */
+    }
+
+    drawWorld() {
+        super.drawWorld()
+        this.worldSphere.scale.x = this.world.radius;
+        this.worldSphere.scale.y = this.world.radius;
+        this.worldSphere.scale.z = this.world.radius;
     }
 
     drawEntity(e) {
@@ -272,7 +289,12 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 
 function runBoids () {
     var sim = new Simulator();
-    var world = new World();
+    var world = new World({
+        cohesion: 70,
+        separation: 20,
+        alignment: 50,
+        collide: 85
+    });
 
     // make random boids, then send them in random headings
     for (var i=0; i < 500; ++i) {
@@ -294,9 +316,9 @@ function runBoids () {
     for (var i=0; i < 50; ++i) {
         var b = new Collidable(world, 200);
         b.pos = new Vector3(
-            Math.random() * 3500 - 1750,
-            Math.random() * 3500 - 1750,
-            Math.random() * 3500 - 1750
+            Math.random() * 4000 - 2000,
+            Math.random() * 4000 - 2000,
+            Math.random() * 4000 - 2000
         );
         world.entities.push(b);
     }
@@ -304,18 +326,35 @@ function runBoids () {
     sim.world = world;
     sim.step();
 
-    var rend = new ThreeJSBoidsRenderer(world);
-    document.body.appendChild(rend.renderer.domElement);
+    var rend = new ThreeJSBoidsRenderer(world, 960, 720);
+    document.getElementById("content").appendChild(rend.renderer.domElement);
 
     rend.draw();
 
-    var controls = new THREE.OrbitControls(rend.camera);
+    var controls = new THREE.OrbitControls(rend.camera, rend.renderer.domElement, rend.renderer.domElement);
+    
+    window.rend = rend;
 
-    // expose the simulator for debugging
-    window.sim = sim;
+    return sim;
 }
 
 
 window.onload = function() {
-    runBoids();
+    var sim = runBoids();
+    // expose the simulator for debugging
+    window.sim = sim;
+
+    var gui = new dat.GUI({ autoPlace: false });
+    var guiWorld = gui.addFolder("World");
+    guiWorld.add(sim.world, "radius", 100, 10000);
+
+    var guiBehavior = gui.addFolder("Behavior");
+    guiBehavior.add(sim.world.behaviorWeights, "cohesion", 0, 1000);
+    guiBehavior.add(sim.world.behaviorWeights, "separation", 0, 1000);
+    guiBehavior.add(sim.world.behaviorWeights, "alignment", 0, 1000);
+    guiBehavior.add(sim.world.behaviorWeights, "collide", 0, 1000);
+
+    document.getElementById("content-controls").appendChild(gui.domElement);
+    guiWorld.open();
+    guiBehavior.open();
 };
