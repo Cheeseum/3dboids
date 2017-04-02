@@ -313,8 +313,8 @@ function runBoids () {
     }
 
     // make random obstacle spheres
-    for (var i=0; i < 50; ++i) {
-        var b = new Collidable(world, 200);
+    for (var i=0; i < 25; ++i) {
+        var b = new Collidable(world, Math.random() * 250 + 100);
         b.pos = new Vector3(
             Math.random() * 4000 - 2000,
             Math.random() * 4000 - 2000,
@@ -337,7 +337,6 @@ function runBoids () {
 
     return sim;
 }
-
 
 window.onload = function() {
     var sim = runBoids();
