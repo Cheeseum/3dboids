@@ -158,7 +158,8 @@ class Node {
                 }
             }
         }
-
+        
+        
         for (let c of this.children) {
             // painful way of doing (point.distanceTo(c.pos) - c.radius)^2 to avoid a sqrt
             // performance improvement seems minimal at best, needs further testing
@@ -167,6 +168,8 @@ class Node {
                 found.push(c);
             }
         }
+        
+        //found = found.concat(this.children);
 
         return found;
     }

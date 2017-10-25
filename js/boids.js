@@ -15,12 +15,10 @@ class Entity {
 class Boid extends Entity {
     constructor(world) {
         super(world);
-
-        this.vision = 200;
     }
 
     step(t, dt) {
-        var neighbors = this.world.octree.search(this.pos, this.vision);
+        var neighbors = this.world.octree.search(this.pos, this.world.behaviorWeights.vision);
         var flockMass = new Vector3(0,0,0);     // local center of geometry
         var flockAvoid = new Vector3(0,0,0);    // heading away from CoG
         var flockHeading = new Vector3(0,0,0);  // average heading of flock
@@ -43,7 +41,7 @@ class Boid extends Entity {
                     
                     // accumulate directions away from neighbors and towards their heading
                     // inverse square distance fall-off in each case 
-                    flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d*d)));
+                    flockAvoid = flockAvoid.add(this.pos.subtract(e.pos).normalize().multiply(1/(d)));
                     flockHeading = flockHeading.add(e.velocity).multiply(1/(d*d));
                 }
             }
@@ -55,7 +53,7 @@ class Boid extends Entity {
             // if we have neighbors, accelerate to the local CoG
             // also modify our acceleration based on each behavior modifying vector
             flockMass = flockMass.multiply(1/(neighbors.length+1));
-            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(this.world.behaviorWeights.cohesion / this.pos.distanceToSq(flockMass));
+            this.acceleration = flockMass.subtract(this.pos).normalize().multiply(this.world.behaviorWeights.cohesion / this.pos.distanceTo(flockMass));
             this.acceleration = this.acceleration.add(flockAvoid.normalize().multiply(this.world.behaviorWeights.separation));
             this.acceleration = this.acceleration.add(flockHeading.normalize().multiply(this.world.behaviorWeights.alignment));
             this.acceleration = this.acceleration.add(collideAvoid.normalize().multiply(this.world.behaviorWeights.collide));
@@ -65,9 +63,16 @@ class Boid extends Entity {
         if (this.pos.magnitude() > this.world.radius) {
             this.acceleration = this.acceleration.add(this.pos.normalize().multiply(-100 * Math.log(this.pos.magnitude() - this.world.radius + 1)));
         }
-    
+   
+        // drag
+        this.acceleration = this.acceleration.add(this.velocity.normalize().multiply(-0.0001 * Math.pow(this.velocity.magnitude(), 2)));
+
+        // noise
+        //this.acceleration = this.acceleration.add(new Vector3(Math.random()*100 - 50, Math.random()*100 - 50, Math.random()*100 - 50)).multiply(dt);
+        this.acceleration = this.acceleration.add(new Vector3(1,1,1).multiply(Math.cos(t)).multiply(Math.random()*this.world.behaviorWeights.noise/100 - this.world.behaviorWeights.noise/200));
+
         // euler approx motion TODO: RK4?
-        this.velocity = this.velocity.add(this.acceleration.multiply(dt)).clamp(200, 200, 200);
+        this.velocity = this.velocity.add(this.acceleration.multiply(5*dt));//.clamp(this.world.behaviorWeights.maxSpeed, this.world.behaviorWeights.maxSpeed, this.world.behaviorWeights.maxSpeed);
         this.pos = this.pos.add(this.velocity.multiply(dt));
     }
 }
@@ -90,11 +95,13 @@ class World {
         
         // defining the default argument here for neatness' sake
         this.behaviorWeights = behaviorWeights || {
+            vision: 200,
+            maxSpeed: 200,
             cohesion: 20,
             separation: 20,
             alignment: 20,
-            collide: 20
-
+            noise: 50,
+//            collide: 20
         }
     }
 
@@ -290,9 +297,12 @@ class ThreeJSBoidsRenderer extends ThreeJSRenderer {
 function runBoids () {
     var sim = new Simulator();
     var world = new World({
+        vision: 100,
+        maxSpeed: 300,
         cohesion: 70,
         separation: 20,
         alignment: 50,
+        noise: 50,
         collide: 85
     });
 
@@ -313,15 +323,15 @@ function runBoids () {
     }
 
     // make random obstacle spheres
-    for (var i=0; i < 50; ++i) {
-        var b = new Collidable(world, 200);
+    /*for (var i=0; i < 25; ++i) {
+        var b = new Collidable(world, Math.random() * 250 + 100);
         b.pos = new Vector3(
             Math.random() * 4000 - 2000,
             Math.random() * 4000 - 2000,
             Math.random() * 4000 - 2000
         );
         world.entities.push(b);
-    }
+    }*/
 
     sim.world = world;
     sim.step();
@@ -338,7 +348,6 @@ function runBoids () {
     return sim;
 }
 
-
 window.onload = function() {
     var sim = runBoids();
     // expose the simulator for debugging
@@ -349,10 +358,13 @@ window.onload = function() {
     guiWorld.add(sim.world, "radius", 100, 10000);
 
     var guiBehavior = gui.addFolder("Behavior");
+    guiBehavior.add(sim.world.behaviorWeights, "vision", 0, 400);
+    guiBehavior.add(sim.world.behaviorWeights, "maxSpeed", 0, 1000);
     guiBehavior.add(sim.world.behaviorWeights, "cohesion", 0, 1000);
     guiBehavior.add(sim.world.behaviorWeights, "separation", 0, 1000);
     guiBehavior.add(sim.world.behaviorWeights, "alignment", 0, 1000);
-    guiBehavior.add(sim.world.behaviorWeights, "collide", 0, 1000);
+    guiBehavior.add(sim.world.behaviorWeights, "noise", 0, 1000);
+//    guiBehavior.add(sim.world.behaviorWeights, "collide", 0, 1000);
 
     document.getElementById("content-controls").appendChild(gui.domElement);
     guiWorld.open();
